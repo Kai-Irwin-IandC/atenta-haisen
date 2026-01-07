@@ -17,7 +17,7 @@ export const Navbar: React.FC = () => {
           </div>
           
           <div className="text-sm text-gray-400 hidden sm:block">
-            Gemini 2.5 Flash Edition
+            Gemini 3.0 Pro Preview
           </div>
         </div>
       </div>

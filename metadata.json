@@ -1,5 +1,5 @@
 {
   "name": "AI Architectural Wiring Visualizer",
-  "description": "Gemini 2.5 Flash Imageを使用した建築配線ビジュアライザー。現場写真に配線図を自動合成します。",
+  "description": "Gemini 3.0を使用した建築配線ビジュアライザー。現場写真に配線図を自動合成します。",
   "requestFramePermissions": []
 }

@@ -37,9 +37,9 @@ export const generateWiringVisualization = async (
     4.  **PRESERVE DETAILS:** Do NOT alter the "ATENTA" poster, the glass doors, the flooring, or the lighting shadows. The rest of the image must remain exactly the same.
   `;
   
-  // Using gemini-2.5-flash-image for generation
+  // Using gemini-3-pro-image-preview for generation
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-image',
+    model: 'gemini-3-pro-image-preview',
     contents: {
       parts: [
         {

@@ -88,7 +88,7 @@ export const WiringVisualizer: React.FC = () => {
         </div>
         <h3 className="text-2xl font-bold text-white mb-2">配線図を生成中...</h3>
         <p className="text-gray-400 text-center max-w-md">
-          Gemini 2.5 Flashが現場写真を解析し、最適な配線ルートを計算・描画しています。<br/>
+          Gemini 3.0が現場写真を解析し、最適な配線ルートを計算・描画しています。<br/>
           この処理には数秒〜数十秒かかる場合があります。
         </p>
       </div>
