@@ -17,9 +17,9 @@ export const generateWiringVisualization = async (
 
   // Refined prompt to strictly enforce line styles and marker removal
   const prompt = `
-    1. Connect ① and ② with a thick solid red line.
-    2. Connect ③ and ④ with a thick dashed blue line.
-    3. Remove the markers and keep everything else exactly the same.
+    1. Thick solid red line: exactly from ① to ②.
+    2. Thick dashed blue line: exactly from ③ to ④.
+    3. Remove all markers; keep the rest of the image unchanged.
   `;
   
   // Using gemini-3-pro-image-preview for generation
