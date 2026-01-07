@@ -17,24 +17,9 @@ export const generateWiringVisualization = async (
 
   // Refined prompt to strictly enforce line styles and marker removal
   const prompt = `
-    You are an expert image editor. Your task is to visualize electrical wiring on the provided construction photo.
-
-    The image contains yellow numbered markers (①, ②, ③, ④).
-    
-    EXECUTE THE FOLLOWING STEPS:
-    1.  **SOLID RED LINE (① to ②):** Draw a thick, **SOLID RED** line connecting the position of marker ① to marker ②.
-        *   Crucial: The line must be SOLID (not dashed).
-        *   The line should follow the wall surface perspective.
-    
-    2.  **DASHED BLUE LINE (③ to ④):** Draw a thick, **DASHED BLUE** line connecting the position of marker ③ to marker ④.
-        *   Crucial: The line must be DASHED (broken line).
-        *   The line should follow the ceiling/wall surface perspective.
-
-    3.  **REMOVE MARKERS:** ERASE the yellow markers ①, ②, ③, and ④ completely. 
-        *   Inpaint the area behind them to match the existing wall/ceiling texture seamlessly.
-        *   Do not leave any trace of the yellow numbers.
-
-    4.  **PRESERVE DETAILS:** Do NOT alter the "ATENTA" poster, the glass doors, the flooring, or the lighting shadows. The rest of the image must remain exactly the same.
+    1. Connect ① and ② with a thick solid red line.
+    2. Connect ③ and ④ with a thick dashed blue line.
+    3. Remove the markers and keep everything else exactly the same.
   `;
   
   // Using gemini-3-pro-image-preview for generation
