@@ -63,7 +63,7 @@ const WiringDiagramTool: React.FC = () => {
           <Zap className="w-8 h-8 text-yellow-500" />
           自動配線図生成
         </h2>
-        <p className="text-slate-600">数字マーカー（①〜④）を認識し、自動で配線を描画します。</p>
+        <p className="text-slate-600">マーカー（①, ⓐ, ②）を認識し、自動で配線を描画します。</p>
       </div>
 
       {/* Initial Upload State */}
@@ -122,7 +122,7 @@ const WiringDiagramTool: React.FC = () => {
             <div className="absolute inset-0 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
           </div>
           <h3 className="text-2xl font-bold text-slate-800 mb-2">解析中...</h3>
-          <p className="text-slate-500">数字マーカーを特定し、Pythonロジックに基づいて描画しています。</p>
+          <p className="text-slate-500">マーカーを特定し、ロジックに基づいて描画しています。</p>
         </div>
       )}
 

@@ -9,16 +9,13 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
              <div className="w-8 h-8 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center text-white font-bold">
-               G
+               AI
              </div>
              <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700">
-               Gemini Vision Workshop
+               AI 配線図生成アプリ
              </h1>
           </div>
           
-          <div className="text-sm text-slate-500 hidden sm:block">
-            Powered by Google Gemini 3.0 Pro
-          </div>
         </div>
       </header>
 
@@ -31,7 +28,7 @@ function App() {
 
       {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-6 text-center text-slate-400 text-sm">
-        <p>&copy; 2024 Gemini Vision Workshop. Built with React & Google GenAI SDK.</p>
+        <p>@2026 Irwin&co All Right Reserved</p>
       </footer>
     </div>
   );

@@ -1,5 +1,5 @@
 {
-  "name": "Gemini Vision Workshop",
+  "name": "AI 配線図生成アプリ",
   "description": "An AI-powered image processing suite featuring automatic wiring diagram generation, natural language image editing, and high-quality image generation using Google's latest Gemini models.",
   "requestFramePermissions": []
 }

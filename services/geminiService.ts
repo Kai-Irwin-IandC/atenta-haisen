@@ -23,7 +23,7 @@ const getAiClient = () => {
 
 // --- Detection & Drawing Logic (Simulating "Python Execution") ---
 
-interface MarkerCoordinates {
+export interface MarkerCoordinates {
   [key: string]: { x: number; y: number } | null;
 }
 
@@ -31,9 +31,9 @@ export const detectMarkerCoordinates = async (base64Image: string, mimeType: str
   const ai = getAiClient();
   
   const prompt = `
-    Analyze the image and locate the exact center coordinates of the numeric markers enclosed in yellow circles: ① (1), ② (2), ③ (3), and ④ (4).
+    Analyze the image and locate the exact center coordinates of the markers enclosed in yellow circles: ① (1), ⓐ (A), and ② (2).
     
-    Return a JSON object with keys "1", "2", "3", "4".
+    Return a JSON object with keys "1", "A", "2".
     The values should be objects { "x": number, "y": number } representing the center of each marker.
     The coordinates must be normalized to a 0-1000 scale (where 0,0 is top-left and 1000,1000 is bottom-right).
     
@@ -42,9 +42,8 @@ export const detectMarkerCoordinates = async (base64Image: string, mimeType: str
     Example Output:
     {
       "1": { "x": 100, "y": 200 },
-      "2": { "x": 105, "y": 400 },
-      "3": null,
-      "4": null
+      "A": { "x": 105, "y": 400 },
+      "2": { "x": 300, "y": 400 }
     }
   `;
 
@@ -105,35 +104,74 @@ export const drawWiringOnCanvas = async (originalBase64: string, mimeType: strin
       };
 
       const p1 = getPt("1");
+      const pA = getPt("A");
       const p2 = getPt("2");
-      const p3 = getPt("3");
-      const p4 = getPt("4");
 
-      // 2. Draw 1-2 Red Solid Line
-      if (p1 && p2) {
+      // --- Draw Lines FIRST (so they appear behind markers) ---
+
+      // 2. Draw 1-A Red Solid Line
+      if (p1 && pA) {
         ctx.beginPath();
         ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.strokeStyle = 'rgb(255, 0, 0)'; // Red
-        ctx.lineWidth = Math.max(3, img.width * 0.005); // Responsive thickness
+        ctx.lineTo(pA.x, pA.y);
+        ctx.strokeStyle = 'rgb(220, 38, 38)'; // Red-600
+        // Line width proportional to image width (approx 0.5%)
+        // Reduced floor to prevent oversized lines on small images
+        ctx.lineWidth = Math.max(1, img.width * 0.005); 
         ctx.setLineDash([]); // Solid
         ctx.lineCap = 'round';
         ctx.stroke();
       }
 
-      // 3. Draw 3-4 Blue Dotted Line
-      if (p3 && p4) {
+      // 3. Draw A-2 Blue Dotted Line
+      if (pA && p2) {
         ctx.beginPath();
-        ctx.moveTo(p3.x, p3.y);
-        ctx.lineTo(p4.x, p4.y);
-        ctx.strokeStyle = 'rgb(0, 0, 255)'; // Blue
-        ctx.lineWidth = Math.max(3, img.width * 0.005); // Responsive thickness
+        ctx.moveTo(pA.x, pA.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.strokeStyle = 'rgb(37, 99, 235)'; // Blue-600
+        // Line width proportional to image width
+        ctx.lineWidth = Math.max(1, img.width * 0.005); 
         // Create a dotted/dashed effect
-        const dashSize = Math.max(5, img.width * 0.01);
+        const dashSize = Math.max(2, img.width * 0.012);
         ctx.setLineDash([dashSize, dashSize]); 
         ctx.lineCap = 'round';
         ctx.stroke();
       }
+
+      // --- Draw Markers LAST (so they appear on top of lines) ---
+      
+      const markerKeys = ["1", "A", "2"];
+      // Responsive marker size to match UI "w-5" (20px) on ~640px container
+      // 20px / 640px = ~3.1% diameter => ~1.55% radius
+      // We use 0.015 (1.5%) to be safe.
+      // IMPORTANT: Reduced floor from 10 to 2 to prevent markers appearing huge on small/thumbnail images
+      const radius = Math.max(2, img.width * 0.015); 
+      const fontSize = radius * 1.1;
+
+      markerKeys.forEach(key => {
+        const pt = getPt(key);
+        if (pt) {
+          // 1. Draw Yellow Circle Background
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, radius, 0, 2 * Math.PI, false);
+          ctx.fillStyle = '#FACC15'; // Yellow-400 (matches UI)
+          ctx.fill();
+
+          // 2. Draw Darker Border
+          ctx.lineWidth = Math.max(0.5, radius * 0.2);
+          ctx.strokeStyle = '#CA8A04'; // Yellow-600
+          ctx.setLineDash([]); // Ensure border is solid
+          ctx.stroke();
+
+          // 3. Draw Number Text
+          ctx.fillStyle = '#000000'; // Black text
+          ctx.font = `bold ${fontSize}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          // Slight vertical offset for visual centering
+          ctx.fillText(key, pt.x, pt.y + (fontSize * 0.08));
+        }
+      });
 
       resolve(canvas.toDataURL(mimeType));
     };
@@ -148,7 +186,13 @@ export const generateWiringDiagram = async (base64Image: string, mimeType: strin
   return drawWiringOnCanvas(base64Image, mimeType, coords);
 };
 
-// Main function to generate 3 diagrams (parallel executions of detection)
+// Generate using manual coordinates (Bypassing AI detection)
+export const generateManualWiringDiagram = async (base64Image: string, mimeType: string, coords: MarkerCoordinates): Promise<string> => {
+  // Direct drawing with provided coordinates
+  return drawWiringOnCanvas(base64Image, mimeType, coords);
+};
+
+// Main function to generate diagrams (parallel executions of detection)
 export const generateWiringDiagramsBatch = async (base64Image: string, mimeType: string, count: number = 3): Promise<string[]> => {
   // We run the detection 'count' times to simulate generation variance (and robustness check)
   const promises = Array(count).fill(0).map(async () => {

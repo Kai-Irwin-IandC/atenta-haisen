@@ -1,7 +1,7 @@
-import React, { useState, useRef } from 'react';
-import { ImagePlus, Sparkles, Download, AlertCircle, Upload, X, ArrowDown, RefreshCcw } from 'lucide-react';
+import React, { useState, useRef, MouseEvent, DragEvent } from 'react';
+import { ImagePlus, Sparkles, Download, AlertCircle, Upload, X, ArrowDown, RefreshCcw, MousePointerClick, CheckCircle2 } from 'lucide-react';
 import { LoadingStatus } from '../types';
-import { generateWiringDiagramsBatch, checkAndRequestApiKey, fileToBase64 } from '../services/geminiService';
+import { generateWiringDiagramsBatch, generateManualWiringDiagram, checkAndRequestApiKey, fileToBase64, MarkerCoordinates } from '../services/geminiService';
 
 const ImageGeneratorTool: React.FC = () => {
   const [status, setStatus] = useState<LoadingStatus>(LoadingStatus.IDLE);
@@ -9,26 +9,64 @@ const ImageGeneratorTool: React.FC = () => {
   const [originalImage, setOriginalImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Drag state
+  const [isDragging, setIsDragging] = useState(false);
+  
+  // Manual Marker State
+  // Changed keys to 1, A, 2
+  const [markerCoords, setMarkerCoords] = useState<MarkerCoordinates>({ "1": null, "A": null, "2": null });
+  const [activeMarkerId, setActiveMarkerId] = useState<string>('1');
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+
+  const processFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+        setError("画像ファイルのみアップロード可能です。");
+        return;
+    }
+
     try {
       const base64 = await fileToBase64(file);
       setOriginalImage(`data:${file.type};base64,${base64}`);
       setResultImages([]);
       setError(null);
+      // Reset markers
+      setMarkerCoords({ "1": null, "A": null, "2": null });
+      setActiveMarkerId('1');
     } catch (err) {
       console.error(err);
       setError("画像の読み込みに失敗しました。");
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) await processFile(file);
+  };
+
+  const onDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const onDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const onDrop = async (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) await processFile(file);
+  };
+
   const handleRemoveImage = () => {
     setOriginalImage(null);
     setResultImages([]);
     setStatus(LoadingStatus.IDLE);
+    setMarkerCoords({ "1": null, "A": null, "2": null });
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -39,9 +77,67 @@ const ImageGeneratorTool: React.FC = () => {
     setResultImages([]);
     setStatus(LoadingStatus.IDLE);
     setError(null);
+    setMarkerCoords({ "1": null, "A": null, "2": null });
+    setActiveMarkerId('1');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  const handleImageClick = (e: MouseEvent<HTMLDivElement>) => {
+    if (!imageRef.current || !activeMarkerId) return;
+
+    const rect = imageRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // Raw normalized coordinates (0-1000)
+    let normalizedX = (x / rect.width) * 1000;
+    let normalizedY = (y / rect.height) * 1000;
+
+    // Requirement 2: Axis alignment logic (Only when SHIFT is pressed)
+    if (e.shiftKey) {
+      // Determine the previous point based on the current active marker
+      let prevPointKey: string | null = null;
+      if (activeMarkerId === 'A') prevPointKey = '1';
+      else if (activeMarkerId === '2') prevPointKey = 'A';
+
+      if (prevPointKey) {
+        const prevPoint = markerCoords[prevPointKey];
+        if (prevPoint) {
+          // Calculate deltas to see if we should snap to X or Y axis
+          const dx = Math.abs(normalizedX - prevPoint.x);
+          const dy = Math.abs(normalizedY - prevPoint.y);
+
+          if (dx < dy) {
+             // Closer to vertical line -> Snap X to previous point's X
+             normalizedX = prevPoint.x;
+          } else {
+             // Closer to horizontal line -> Snap Y to previous point's Y
+             normalizedY = prevPoint.y;
+          }
+        }
+      }
+    }
+
+    setMarkerCoords(prev => ({
+      ...prev,
+      [activeMarkerId]: { x: normalizedX, y: normalizedY }
+    }));
+
+    // Auto-advance logic
+    let nextId = '';
+    if (activeMarkerId === '1') nextId = 'A';
+    else if (activeMarkerId === 'A') nextId = '2';
+    // If 2, stop or stay at 2 (no next step defined)
+
+    if (nextId) {
+        setActiveMarkerId(nextId);
+    }
+  };
+
+  const setManualMarker = (id: string) => {
+    setActiveMarkerId(id);
   };
 
   const handleGenerate = async () => {
@@ -62,8 +158,19 @@ const ImageGeneratorTool: React.FC = () => {
       const base64 = originalImage.split(',')[1];
       const mimeType = originalImage.split(';')[0].split(':')[1];
 
-      // Generate 3 images using the precise detection + drawing logic
-      const results = await generateWiringDiagramsBatch(base64, mimeType, 3);
+      // Check if markers are manually placed. If so, use manual generation.
+      const hasManualMarkers = Object.values(markerCoords).some(v => v !== null);
+
+      let results: string[] = [];
+
+      if (hasManualMarkers) {
+        // Use Manual Coordinates - generate 1 deterministic result
+        const result = await generateManualWiringDiagram(base64, mimeType, markerCoords);
+        results = [result];
+      } else {
+         // Fallback to AI Detection
+         results = await generateWiringDiagramsBatch(base64, mimeType, 3);
+      }
       
       setResultImages(results);
       setStatus(LoadingStatus.SUCCESS);
@@ -87,10 +194,10 @@ const ImageGeneratorTool: React.FC = () => {
           <div className="absolute inset-0 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
         </div>
         <h2 className="text-2xl font-bold text-slate-800 mb-2">配線図を生成中...</h2>
-        <p className="text-slate-500 mb-8">数字マーカーを解析し、正確なラインを描画しています</p>
+        <p className="text-slate-500 mb-8">指定されたマーカー位置に基づいて、正確なラインを描画しています</p>
         <div className="flex gap-2 text-sm text-slate-400 bg-slate-50 px-4 py-2 rounded-full">
            <Sparkles className="w-4 h-4" />
-           <span>Processing with Gemini 3.0 Vision</span>
+           <span>Processing with 3DPers Module</span>
         </div>
       </div>
     );
@@ -116,9 +223,11 @@ const ImageGeneratorTool: React.FC = () => {
 
         <div className="w-full">
            <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-100">
-              <span className="text-center text-lg font-bold text-indigo-600 uppercase tracking-wider mb-6 block">生成結果 (3パターン)</span>
+              <span className="text-center text-lg font-bold text-indigo-600 uppercase tracking-wider mb-6 block">
+                 生成結果 {resultImages.length > 1 && "(3パターン)"}
+              </span>
               
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className={`grid grid-cols-1 ${resultImages.length > 1 ? 'md:grid-cols-3' : 'md:grid-cols-1 md:max-w-2xl md:mx-auto'} gap-6`}>
                 {resultImages.map((img, idx) => (
                   <div key={idx} className="flex flex-col bg-white p-3 rounded-xl shadow-sm border border-indigo-100 transition-transform hover:-translate-y-1 duration-200">
                     <div className="aspect-square rounded-lg overflow-hidden bg-slate-50 mb-3 border border-slate-100 relative group">
@@ -149,22 +258,37 @@ const ImageGeneratorTool: React.FC = () => {
           <ImagePlus className="w-8 h-8 text-indigo-600" />
           AI 配線図生成アプリ
         </h2>
-        <p className="text-slate-600">入力画像を解析し、特定のルール（①-②赤線、③-④青点線）に基づいて配線図を自動生成します。</p>
+        <p className="text-slate-600">入力画像を指定し、①〜②の数字位置を設定してください。<br/>設定された位置に基づいて配線（①-ⓐ赤線、ⓐ-②青点線）を自動生成します。</p>
       </div>
 
       <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-lg max-w-2xl mx-auto">
          {/* Upload Area */}
-         <div className="mb-8">
-           <label className="block text-sm font-bold text-slate-700 mb-2 text-center">入力画像をアップロード</label>
-           {!originalImage ? (
+         {!originalImage ? (
+           <div className="mb-8">
+             <label className="block text-sm font-bold text-slate-700 mb-2 text-center">入力画像をアップロード</label>
              <div 
                onClick={() => fileInputRef.current?.click()}
-               className="border-2 border-dashed border-slate-300 rounded-xl h-64 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 hover:border-indigo-400 transition-all group"
+               onDragOver={onDragOver}
+               onDragLeave={onDragLeave}
+               onDrop={onDrop}
+               className={`border-2 border-dashed rounded-xl h-64 flex flex-col items-center justify-center cursor-pointer transition-all group ${
+                 isDragging 
+                   ? 'border-indigo-500 bg-indigo-50 scale-[1.02]' 
+                   : 'border-slate-300 hover:bg-slate-50 hover:border-indigo-400'
+               }`}
              >
-               <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4 group-hover:bg-indigo-50 transition-colors">
-                 <Upload className="w-8 h-8 text-slate-400 group-hover:text-indigo-500 transition-colors" />
+               <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 transition-colors ${
+                 isDragging ? 'bg-indigo-100' : 'bg-slate-100 group-hover:bg-indigo-50'
+               }`}>
+                 <Upload className={`w-8 h-8 transition-colors ${
+                   isDragging ? 'text-indigo-600' : 'text-slate-400 group-hover:text-indigo-500'
+                 }`} />
                </div>
-               <span className="text-lg font-medium text-slate-600 group-hover:text-indigo-600">クリックして選択</span>
+               <span className={`text-lg font-medium transition-colors ${
+                 isDragging ? 'text-indigo-700' : 'text-slate-600 group-hover:text-indigo-600'
+               }`}>
+                 {isDragging ? 'ドロップしてアップロード' : 'クリックして選択'}
+               </span>
                <p className="text-sm text-slate-400 mt-1">または画像をドロップ</p>
                <input 
                  type="file" 
@@ -174,20 +298,77 @@ const ImageGeneratorTool: React.FC = () => {
                  onChange={handleFileUpload}
                />
              </div>
-           ) : (
-             <div className="relative rounded-xl overflow-hidden border-2 border-indigo-100 bg-slate-50 group">
-               <img src={originalImage} alt="Preview" className="w-full h-64 object-contain" />
-               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
-                  <button 
-                    onClick={handleRemoveImage}
-                    className="p-3 bg-white text-slate-800 rounded-full font-medium hover:bg-red-50 hover:text-red-600 transition-colors flex items-center gap-2"
-                  >
-                    <X className="w-5 h-5" /> キャンセル
-                  </button>
-               </div>
-             </div>
-           )}
-         </div>
+           </div>
+         ) : (
+           <div className="mb-8">
+              <div className="flex items-center justify-between mb-4">
+                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                    <MousePointerClick className="w-5 h-5 text-indigo-600" />
+                    マーカー位置指定
+                 </h3>
+                 <button onClick={handleRemoveImage} className="text-sm text-red-500 hover:text-red-600 font-medium">画像を変更</button>
+              </div>
+              
+              {/* Marker Toolbar */}
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4 flex gap-2 justify-center">
+                 {["1", "A", "2"].map((id) => {
+                    const isSet = markerCoords[id] !== null;
+                    const isActive = activeMarkerId === id;
+                    return (
+                       <button 
+                          key={id}
+                          onClick={() => setManualMarker(id)}
+                          className={`
+                             relative w-12 h-12 rounded-full font-bold text-lg flex items-center justify-center border-2 transition-all
+                             ${isActive 
+                               ? 'bg-yellow-400 text-black border-yellow-500 ring-2 ring-yellow-200 scale-110 z-10' 
+                               : isSet 
+                                  ? 'bg-yellow-100 text-slate-600 border-yellow-200 hover:bg-yellow-200' 
+                                  : 'bg-white text-slate-400 border-slate-200 hover:border-indigo-300'}
+                          `}
+                       >
+                          {isSet && <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-[10px] text-white"><CheckCircle2 className="w-3 h-3"/></div>}
+                          {id}
+                       </button>
+                    )
+                 })}
+              </div>
+              <p className="text-xs text-center text-slate-500 mb-4">
+                クリックした位置に番号（強調表示）が配置されます。<br/>
+                <span className="text-indigo-600 font-medium">※Shiftキーを押しながらクリックすると、直前の点から垂直・水平位置にスナップします</span>
+              </p>
+
+              {/* Interactive Image Area */}
+              <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-900 cursor-crosshair group select-none">
+                 <div className="relative" onClick={handleImageClick}>
+                    <img 
+                       ref={imageRef}
+                       src={originalImage} 
+                       alt="Workspace" 
+                       className="w-full h-auto object-contain block" 
+                    />
+                    
+                    {/* Render Markers */}
+                    {Object.entries(markerCoords).map(([key, value]) => {
+                       const coord = value as { x: number, y: number } | null;
+                       if (!coord) return null;
+                       return (
+                          <div
+                             key={key}
+                             className="absolute w-5 h-5 -ml-2.5 -mt-2.5 rounded-full bg-yellow-400 border border-yellow-600 text-black font-bold flex items-center justify-center shadow-md text-[10px] pointer-events-none z-10"
+                             style={{
+                                left: `${coord.x / 10}%`,
+                                top: `${coord.y / 10}%`
+                             }}
+                          >
+                             {key}
+                          </div>
+                       );
+                    })}
+                 </div>
+              </div>
+           </div>
+         )}
 
          {/* Generate Button */}
          <div className="space-y-4">
@@ -199,11 +380,6 @@ const ImageGeneratorTool: React.FC = () => {
              <Sparkles className="w-6 h-6" />
              配線図を生成
            </button>
-           
-           <div className="p-3 bg-blue-50 text-blue-800 text-sm rounded-lg flex items-center justify-center gap-2">
-              <AlertCircle className="w-5 h-5 flex-shrink-0" />
-              <span>Proモデルの使用には、ご自身の有料APIキーの選択が必要です。</span>
-           </div>
          </div>
       </div>
 
