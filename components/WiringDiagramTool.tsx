@@ -63,7 +63,7 @@ const WiringDiagramTool: React.FC = () => {
           <Zap className="w-8 h-8 text-yellow-500" />
           自動配線図生成
         </h2>
-        <p className="text-slate-600">マーカー（①, ⓐ, ②）を認識し、自動で配線を描画します。</p>
+        <p className="text-slate-600">マーカー（①, Ⓐ, ②）を認識し、自動で配線を描画します。</p>
       </div>
 
       {/* Initial Upload State */}

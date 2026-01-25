@@ -27,11 +27,18 @@ export interface MarkerCoordinates {
   [key: string]: { x: number; y: number } | null;
 }
 
+export type LineStyle = 'blue-dotted' | 'red-solid';
+
+export interface WiringStyles {
+  segment1A: LineStyle;
+  segmentA2: LineStyle;
+}
+
 export const detectMarkerCoordinates = async (base64Image: string, mimeType: string): Promise<MarkerCoordinates> => {
   const ai = getAiClient();
   
   const prompt = `
-    Analyze the image and locate the exact center coordinates of the markers enclosed in yellow circles: ① (1), ⓐ (A), and ② (2).
+    Analyze the image and locate the exact center coordinates of the markers enclosed in yellow circles: ① (1), Ⓐ (A), and ② (2).
     
     Return a JSON object with keys "1", "A", "2".
     The values should be objects { "x": number, "y": number } representing the center of each marker.
@@ -77,7 +84,12 @@ export const detectMarkerCoordinates = async (base64Image: string, mimeType: str
   }
 };
 
-export const drawWiringOnCanvas = async (originalBase64: string, mimeType: string, coords: MarkerCoordinates): Promise<string> => {
+export const drawWiringOnCanvas = async (
+  originalBase64: string, 
+  mimeType: string, 
+  coords: MarkerCoordinates,
+  styles: WiringStyles = { segment1A: 'red-solid', segmentA2: 'blue-dotted' }
+): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -108,33 +120,37 @@ export const drawWiringOnCanvas = async (originalBase64: string, mimeType: strin
       const p2 = getPt("2");
 
       // --- Draw Lines FIRST (so they appear behind markers) ---
+      // Line width proportional to image width (approx 0.5%)
+      const baseLineWidth = Math.max(1, img.width * 0.005);
 
-      // 2. Draw 1-A Red Solid Line
+      const setContextStyle = (style: LineStyle) => {
+        if (style === 'red-solid') {
+          ctx.strokeStyle = 'rgb(220, 38, 38)'; // Red-600
+          ctx.setLineDash([]);
+        } else {
+          ctx.strokeStyle = 'rgb(37, 99, 235)'; // Blue-600
+          const dashSize = Math.max(2, img.width * 0.012);
+          ctx.setLineDash([dashSize, dashSize]); 
+        }
+        ctx.lineWidth = baseLineWidth;
+        ctx.lineCap = 'round';
+      };
+
+      // 2. Draw 1-A
       if (p1 && pA) {
         ctx.beginPath();
         ctx.moveTo(p1.x, p1.y);
         ctx.lineTo(pA.x, pA.y);
-        ctx.strokeStyle = 'rgb(220, 38, 38)'; // Red-600
-        // Line width proportional to image width (approx 0.5%)
-        // Reduced floor to prevent oversized lines on small images
-        ctx.lineWidth = Math.max(1, img.width * 0.005); 
-        ctx.setLineDash([]); // Solid
-        ctx.lineCap = 'round';
+        setContextStyle(styles.segment1A);
         ctx.stroke();
       }
 
-      // 3. Draw A-2 Blue Dotted Line
+      // 3. Draw A-2
       if (pA && p2) {
         ctx.beginPath();
         ctx.moveTo(pA.x, pA.y);
         ctx.lineTo(p2.x, p2.y);
-        ctx.strokeStyle = 'rgb(37, 99, 235)'; // Blue-600
-        // Line width proportional to image width
-        ctx.lineWidth = Math.max(1, img.width * 0.005); 
-        // Create a dotted/dashed effect
-        const dashSize = Math.max(2, img.width * 0.012);
-        ctx.setLineDash([dashSize, dashSize]); 
-        ctx.lineCap = 'round';
+        setContextStyle(styles.segmentA2);
         ctx.stroke();
       }
 
@@ -144,7 +160,6 @@ export const drawWiringOnCanvas = async (originalBase64: string, mimeType: strin
       // Responsive marker size to match UI "w-5" (20px) on ~640px container
       // 20px / 640px = ~3.1% diameter => ~1.55% radius
       // We use 0.015 (1.5%) to be safe.
-      // IMPORTANT: Reduced floor from 10 to 2 to prevent markers appearing huge on small/thumbnail images
       const radius = Math.max(2, img.width * 0.015); 
       const fontSize = radius * 1.1;
 
@@ -181,23 +196,37 @@ export const drawWiringOnCanvas = async (originalBase64: string, mimeType: strin
 };
 
 // Single generation function for WiringDiagramTool
-export const generateWiringDiagram = async (base64Image: string, mimeType: string): Promise<string> => {
+export const generateWiringDiagram = async (
+  base64Image: string, 
+  mimeType: string,
+  styles: WiringStyles = { segment1A: 'red-solid', segmentA2: 'blue-dotted' }
+): Promise<string> => {
   const coords = await detectMarkerCoordinates(base64Image, mimeType);
-  return drawWiringOnCanvas(base64Image, mimeType, coords);
+  return drawWiringOnCanvas(base64Image, mimeType, coords, styles);
 };
 
 // Generate using manual coordinates (Bypassing AI detection)
-export const generateManualWiringDiagram = async (base64Image: string, mimeType: string, coords: MarkerCoordinates): Promise<string> => {
+export const generateManualWiringDiagram = async (
+  base64Image: string, 
+  mimeType: string, 
+  coords: MarkerCoordinates,
+  styles: WiringStyles = { segment1A: 'red-solid', segmentA2: 'blue-dotted' }
+): Promise<string> => {
   // Direct drawing with provided coordinates
-  return drawWiringOnCanvas(base64Image, mimeType, coords);
+  return drawWiringOnCanvas(base64Image, mimeType, coords, styles);
 };
 
 // Main function to generate diagrams (parallel executions of detection)
-export const generateWiringDiagramsBatch = async (base64Image: string, mimeType: string, count: number = 3): Promise<string[]> => {
+export const generateWiringDiagramsBatch = async (
+  base64Image: string, 
+  mimeType: string, 
+  count: number = 3,
+  styles: WiringStyles = { segment1A: 'red-solid', segmentA2: 'blue-dotted' }
+): Promise<string[]> => {
   // We run the detection 'count' times to simulate generation variance (and robustness check)
   const promises = Array(count).fill(0).map(async () => {
      const coords = await detectMarkerCoordinates(base64Image, mimeType);
-     return drawWiringOnCanvas(base64Image, mimeType, coords);
+     return drawWiringOnCanvas(base64Image, mimeType, coords, styles);
   });
   
   return Promise.all(promises);

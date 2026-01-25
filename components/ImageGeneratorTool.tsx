@@ -1,7 +1,7 @@
 import React, { useState, useRef, MouseEvent, DragEvent } from 'react';
-import { ImagePlus, Sparkles, Download, AlertCircle, Upload, X, ArrowDown, RefreshCcw, MousePointerClick, CheckCircle2 } from 'lucide-react';
+import { ImagePlus, Sparkles, Download, AlertCircle, Upload, X, ArrowDown, RefreshCcw, MousePointerClick, CheckCircle2, Settings2 } from 'lucide-react';
 import { LoadingStatus } from '../types';
-import { generateWiringDiagramsBatch, generateManualWiringDiagram, checkAndRequestApiKey, fileToBase64, MarkerCoordinates } from '../services/geminiService';
+import { generateWiringDiagramsBatch, generateManualWiringDiagram, checkAndRequestApiKey, fileToBase64, MarkerCoordinates, LineStyle, WiringStyles } from '../services/geminiService';
 
 const ImageGeneratorTool: React.FC = () => {
   const [status, setStatus] = useState<LoadingStatus>(LoadingStatus.IDLE);
@@ -16,6 +16,12 @@ const ImageGeneratorTool: React.FC = () => {
   // Changed keys to 1, A, 2
   const [markerCoords, setMarkerCoords] = useState<MarkerCoordinates>({ "1": null, "A": null, "2": null });
   const [activeMarkerId, setActiveMarkerId] = useState<string>('1');
+
+  // Line Style State
+  const [styles, setStyles] = useState<WiringStyles>({
+    segment1A: 'red-solid',
+    segmentA2: 'blue-dotted'
+  });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
@@ -140,6 +146,13 @@ const ImageGeneratorTool: React.FC = () => {
     setActiveMarkerId(id);
   };
 
+  const updateStyle = (segment: keyof WiringStyles, style: LineStyle) => {
+    setStyles(prev => ({
+      ...prev,
+      [segment]: style
+    }));
+  };
+
   const handleGenerate = async () => {
     if (!originalImage) return;
     
@@ -165,11 +178,11 @@ const ImageGeneratorTool: React.FC = () => {
 
       if (hasManualMarkers) {
         // Use Manual Coordinates - generate 1 deterministic result
-        const result = await generateManualWiringDiagram(base64, mimeType, markerCoords);
+        const result = await generateManualWiringDiagram(base64, mimeType, markerCoords, styles);
         results = [result];
       } else {
          // Fallback to AI Detection
-         results = await generateWiringDiagramsBatch(base64, mimeType, 3);
+         results = await generateWiringDiagramsBatch(base64, mimeType, 3, styles);
       }
       
       setResultImages(results);
@@ -258,7 +271,7 @@ const ImageGeneratorTool: React.FC = () => {
           <ImagePlus className="w-8 h-8 text-indigo-600" />
           AI 配線図生成アプリ
         </h2>
-        <p className="text-slate-600">入力画像を指定し、①〜②の数字位置を設定してください。<br/>設定された位置に基づいて配線（①-ⓐ赤線、ⓐ-②青点線）を自動生成します。</p>
+        <p className="text-slate-600">入力画像を指定し、①〜②の数字位置を設定してください。<br/>設定された位置に基づいて配線（①-Ⓐ青点線 or 赤線、Ⓐ-②青点線 or 赤線）を自動生成します。</p>
       </div>
 
       <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-lg max-w-2xl mx-auto">
@@ -339,7 +352,7 @@ const ImageGeneratorTool: React.FC = () => {
               </p>
 
               {/* Interactive Image Area */}
-              <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-900 cursor-crosshair group select-none">
+              <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-900 cursor-crosshair group select-none mb-6">
                  <div className="relative" onClick={handleImageClick}>
                     <img 
                        ref={imageRef}
@@ -367,6 +380,87 @@ const ImageGeneratorTool: React.FC = () => {
                     })}
                  </div>
               </div>
+
+              {/* Settings Area */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6">
+                <div className="flex items-center gap-2 mb-3 text-slate-800 font-bold text-sm">
+                   <Settings2 className="w-4 h-4 text-indigo-600" />
+                   生成オプション
+                </div>
+                
+                <div className="flex flex-col gap-4">
+                   {/* 1-A Setting */}
+                   <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm text-slate-600 border-b border-slate-100 pb-3">
+                      <span className="font-medium min-w-[120px]">①-Ⓐ 配線スタイル:</span>
+                      <div className="flex gap-4">
+                        <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-100 p-1 rounded transition-colors">
+                           <input 
+                             type="radio" 
+                             name="lineStyle1A" 
+                             value="blue-dotted"
+                             checked={styles.segment1A === 'blue-dotted'}
+                             onChange={() => updateStyle('segment1A', 'blue-dotted')}
+                             className="text-indigo-600 focus:ring-indigo-500"
+                           />
+                           <span className="flex items-center gap-1">
+                             <span className="w-3 h-0.5 border-t-2 border-blue-500 border-dotted inline-block"></span>
+                             青色・点線
+                           </span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-100 p-1 rounded transition-colors">
+                           <input 
+                             type="radio" 
+                             name="lineStyle1A" 
+                             value="red-solid"
+                             checked={styles.segment1A === 'red-solid'}
+                             onChange={() => updateStyle('segment1A', 'red-solid')}
+                             className="text-indigo-600 focus:ring-indigo-500"
+                           />
+                           <span className="flex items-center gap-1">
+                             <span className="w-3 h-0.5 bg-red-600 inline-block"></span>
+                             赤色・実線
+                           </span>
+                        </label>
+                      </div>
+                   </div>
+
+                   {/* A-2 Setting */}
+                   <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm text-slate-600">
+                      <span className="font-medium min-w-[120px]">Ⓐ-② 配線スタイル:</span>
+                      <div className="flex gap-4">
+                        <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-100 p-1 rounded transition-colors">
+                           <input 
+                             type="radio" 
+                             name="lineStyleA2" 
+                             value="blue-dotted"
+                             checked={styles.segmentA2 === 'blue-dotted'}
+                             onChange={() => updateStyle('segmentA2', 'blue-dotted')}
+                             className="text-indigo-600 focus:ring-indigo-500"
+                           />
+                           <span className="flex items-center gap-1">
+                             <span className="w-3 h-0.5 border-t-2 border-blue-500 border-dotted inline-block"></span>
+                             青色・点線
+                           </span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-100 p-1 rounded transition-colors">
+                           <input 
+                             type="radio" 
+                             name="lineStyleA2" 
+                             value="red-solid"
+                             checked={styles.segmentA2 === 'red-solid'}
+                             onChange={() => updateStyle('segmentA2', 'red-solid')}
+                             className="text-indigo-600 focus:ring-indigo-500"
+                           />
+                           <span className="flex items-center gap-1">
+                             <span className="w-3 h-0.5 bg-red-600 inline-block"></span>
+                             赤色・実線
+                           </span>
+                        </label>
+                      </div>
+                   </div>
+                </div>
+              </div>
+
            </div>
          )}
 
